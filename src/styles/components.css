@@ -1,0 +1,41 @@
+/* Component-specific styles */
+
+.finley-character {
+  transition: transform 0.3s ease;
+}
+
+.finley-character:hover {
+  transform: scale(1.1);
+}
+
+.transaction-item {
+  @apply border-b border-gray-100 last:border-b-0;
+}
+
+.goal-progress {
+  @apply bg-gray-200 rounded-full h-2 overflow-hidden;
+}
+
+.goal-progress-bar {
+  @apply bg-gradient-to-r from-blue-500 to-green-500 h-full transition-all duration-500;
+}
+
+/* Animations */
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0,0,0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -30px, 0);
+  }
+  70% {
+    transform: translate3d(0, -15px, 0);
+  }
+  90% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce 2s infinite;
+}
