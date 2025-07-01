@@ -1,61 +1,74 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { AppProvider, useAppContext } from './context/AppContext';
-import { BottomNav } from './components/BottomNav';
-import { HomePage } from './pages/HomePage';
-import { AnalyticsPage } from './pages/AnalyticsPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { AddTransactionPage } from './pages/AddTransactionPage';
-import { Auth } from './supabaseClient';
-import { supabase } from './supabaseClient';
+import { useState, useEffect } from 'react';
+import { Session } from '@supabase/supabase-js';
+import { Auth } from '@supabase/auth-ui-react';
+import { ThemeSupa } from '@supabase/auth-ui-shared';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
-import './styles/App.css'; 
-import './components/BottomNav.css';
+// --- ИСПРАВЛЕННЫЙ ПУТЬ ЗДЕСЬ ---
+// Мы убрали лишнюю часть пути, так как App.tsx и supabaseClient.ts находятся в одной папке src
+import { supabase } from './supabaseClient'; 
 
-const AppContent = () => {
-  const { user, loading } = useAppContext();
+// Импорты ваших компонентов и страниц
+import { AppContextProvider } from './context/AppContext';
+import HomePage from './pages/HomePage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import ProfilePage from './pages/ProfilePage';
+import AddTransactionPage from './pages/AddTransactionPage';
+import BottomNav from './components/BottomNav';
+import './App.css'; // Ваши глобальные стили
 
-  if (loading) {
-    return <div className="container">Загрузка...</div>;
-  }
-  
-  if (!user) {
+function App() {
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    // 1. Получаем текущую сессию при первой загрузке
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    // 2. Устанавливаем слушатель, который будет реагировать на
+    //    события входа (SIGNED_IN) и выхода (SIGNED_OUT)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    // 3. Отписываемся от слушателя, когда компонент размонтируется
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Если сессии нет (пользователь не авторизован), показываем форму входа
+  if (!session) {
     return (
-      <div className="container" style={{ paddingTop: '50px' }}>
-        <div className="glass-card">
-          <h2>Вход в CoinQuest</h2>
-          <Auth
-            supabaseClient={supabase}
-            appearance={{ theme: 'dark' }}
-            providers={['telegram']}
-            theme="light"
-          />
-        </div>
+      <div className="auth-container">
+        <Auth
+          supabaseClient={supabase}
+          appearance={{ theme: ThemeSupa }}
+          providers={['google', 'github']} // Опционально: добавьте провайдеров
+          theme="dark"
+        />
       </div>
     );
   }
 
+  // Если сессия есть, показываем основное приложение
   return (
-    <>
-      <main className="page-content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/add" element={<AddTransactionPage />} />
-        </Routes>
-      </main>
-      <BottomNav />
-    </>
-  );
-};
-
-function App() {
-  return (
-    <AppProvider>
+    <AppContextProvider>
       <BrowserRouter>
-        <AppContent />
+        <div className="app-container">
+          <main className="main-content">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/add" element={<AddTransactionPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+            </Routes>
+          </main>
+          <BottomNav />
+        </div>
       </BrowserRouter>
-    </AppProvider>
+    </AppContextProvider>
   );
 }
 
