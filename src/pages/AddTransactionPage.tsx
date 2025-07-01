@@ -1,65 +1,58 @@
-// src/pages/AddTransactionPage.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 
 export const AddTransactionPage = () => {
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const navigate = useNavigate();
-  const { addTransaction } = useAppContext();
+  const { addTransaction, categories } = useAppContext();
 
-  // Устанавливаем категорию по умолчанию при смене типа
+  const filteredCategories = categories.filter(c => c.type === type);
+
   useEffect(() => {
-    if (type === 'expense') {
-      setCategory('Продукты');
-    } else {
-      setCategory('Зарплата');
+    if (filteredCategories.length > 0) {
+      setSelectedCategoryId(filteredCategories[0].id);
     }
-  }, [type]);
+  }, [type, categories]);
   
   const handleAdd = async () => {
-    if (amount) {
-      await addTransaction(type, parseFloat(amount), category);
-      navigate('/'); // Возвращаемся на главную после добавления
+    if (amount && selectedCategoryId) {
+      await addTransaction(type, parseFloat(amount), selectedCategoryId);
+      navigate('/');
     }
   };
-
-  const expenseCategories = ['Продукты', 'Кафе', 'Транспорт', 'Дом', 'Развлечения', 'Связь'];
-  const incomeCategories = ['Зарплата', 'Подарок', 'Подработка', 'Продажа'];
 
   return (
     <div className="container">
       <div className="glass-card">
-        {/* Переключатель Доход/Расход */}
         <div className={`type-switcher ${type === 'income' ? 'income-active' : ''}`}>
           <button onClick={() => setType('expense')} className={type === 'expense' ? 'active' : ''}>Расход</button>
           <button onClick={() => setType('income')} className={type === 'income' ? 'active' : ''}>Доход</button>
         </div>
 
         <input 
-            type="number" 
+            type="tel"
+            inputMode="decimal"
+            pattern="[0-9]*"
             value={amount} 
-            onChange={e => setAmount(e.target.value)}
+            onChange={e => e.target.value.match(/^\d*\.?\d*$/) && setAmount(e.target.value)}
             placeholder="0.00"
             className="amount-input"
             autoFocus
         />
         <div className="categories">
-            {(type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+            {filteredCategories.map(cat => (
                 <button 
-                    key={cat}
-                    className={`cat-btn ${category === cat ? 'active' : ''}`}
-                    onClick={() => setCategory(cat)}
-                >{cat}</button>
+                    key={cat.id}
+                    className={`cat-btn ${selectedCategoryId === cat.id ? 'active' : ''}`}
+                    onClick={() => setSelectedCategoryId(cat.id)}
+                >{cat.name}</button>
             ))}
         </div>
-        <button 
-          className={`btn ${type}`} 
-          onClick={handleAdd}
-        >
-          {type === 'expense' ? 'Добавить расход' : 'Добавить доход'}
+        <button className={`btn ${type}`} onClick={handleAdd}>
+          Добавить
         </button>
       </div>
     </div>

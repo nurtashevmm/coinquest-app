@@ -1,30 +1,27 @@
-// src/pages/HomePage.tsx - Элегантная Перекомпоновка
 import { useAppContext } from '../context/AppContext';
 
 export const HomePage = () => {
-  const { tmaUser, transactions, loading } = useAppContext();
+  const { profile, transactions, categories, loading } = useAppContext();
+
+  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
   const total = transactions.reduce((sum, t) => sum + t.amount, 0);
 
-  if (loading) {
+  if (loading || !profile) {
     return <div className="container">Загрузка...</div>;
   }
 
   return (
-    // Убираем из основного контейнера `text-align: center` для гибкости
     <div className="container page-home">
-      
-      {/* Новый заголовок */}
       <div className="page-header">
-        <h1 className="text-glass">CoinQuest</h1>
-        <p className="welcome-text">Привет, {tmaUser?.firstName || 'Герой'}!</p>
+        <h1>CoinQuest</h1>
+        <p className="welcome-text">Привет, {profile.username || 'Герой'}!</p>
       </div>
       
-      {/* Главный элемент - Баланс */}
       <div className="balance-container">
         <span className="balance-label">Текущий баланс</span>
         <div className="balance text-glass">
           {total.toFixed(2)}
-          <span className="currency-symbol"> ₽</span>
+          <span className="currency-symbol"> {profile.currency}</span>
         </div>
       </div>
       
@@ -34,9 +31,9 @@ export const HomePage = () => {
           {transactions.length > 0 ? (
             transactions.slice(0, 5).map(t => (
               <div key={t.id} className="item">
-                <span>{t.category}</span>
+                <span>{categoryMap.get(t.category_id) || 'Без категории'}</span>
                 <span className={t.amount < 0 ? 'amount-expense' : 'amount-income'}>
-                  {t.amount > 0 ? '+' : ''}{t.amount.toFixed(2)} ₽
+                  {t.amount > 0 ? '+' : ''}{t.amount.toFixed(2)}
                 </span>
               </div>
             ))
