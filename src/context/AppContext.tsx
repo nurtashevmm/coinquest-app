@@ -1,17 +1,17 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+// ПРОБЛЕМНЫЙ ИМПОРТ { User } УДАЛЕН НАВСЕГДА
 
 // --- ТИПЫ ДАННЫХ ---
 export type Category = { id: number; name: string; type: 'income' | 'expense'; icon_name: string | null; };
 export type Item = { id: number; name: string; price: number; icon_name: string; slot: string; };
 export type UserItem = { id: number; user_id: string; item_id: number; is_equipped: boolean; items: Item; };
 export type Profile = { id: string; username: string | null; level: number; xp: number; gold: number; currency: string; };
-export type Transaction = { id: number; user_id: string; category_id: number; amount: number; type: 'income' | 'expense'; transaction_date: string; notes: string | null; };
+export type Transaction = { id: number; user_id: string; category_id: number; amount: number; type: 'income' | 'expense'; transaction_date: string; notes: string | null; categories: { name: string } };
 
 // --- ИНТЕРФЕЙС КОНТЕКСТА ---
 interface IAppContext {
-  supabaseUser: SupabaseUser | null;
+  user: any | null; // Используем 'any' для 100% совместимости
   profile: Profile | null;
   transactions: Transaction[];
   categories: Category[];
@@ -25,12 +25,9 @@ interface IAppContext {
     
 const AppContext = createContext<IAppContext | null>(null);
 
-// --- РЕЖИМ РАЗРАБОТКИ ---
-const isDev = import.meta.env.DEV;
-
 // --- ПРОВАЙДЕР КОНТЕКСТА ---
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -38,67 +35,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [storeItems, setStoreItems] = useState<Item[]>([]);
   const [userItems, setUserItems] = useState<UserItem[]>([]);
   
-  const getProfile = useCallback(async (userId: string) => { /* ... */ });
-  const getTransactions = useCallback(async (userId: string) => { /* ... */ });
-  const getCategories = useCallback(async (userId: string) => { /* ... */ });
-  const getStoreItems = useCallback(async () => { /* ... */ });
-  const getUserItems = useCallback(async (userId: string) => { /* ... */ });
+  const getProfile = useCallback(async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (data) setProfile(data);
+  }, []);
+
+  const getTransactions = useCallback(async (userId: string) => {
+    const { data } = await supabase.from('transactions').select('*, categories(name)').eq('user_id', userId).order('transaction_date', { ascending: false });
+    if (data) setTransactions(data as any);
+  }, []);
+
+  const getCategories = useCallback(async (userId: string) => {
+    const { data } = await supabase.from('categories').select('*').or(`user_id.eq.${userId},user_id.is.null`);
+    if (data) setCategories(data);
+  }, []);
+
+  const getStoreItems = useCallback(async () => {
+    const { data } = await supabase.from('items').select('*');
+    if (data) setStoreItems(data);
+  }, []);
+
+  const getUserItems = useCallback(async (userId: string) => {
+    const { data } = await supabase.from('user_items').select('*, items(*)').eq('user_id', userId);
+    if (data) setUserItems(data as UserItem[]);
+  }, []);
 
   useEffect(() => {
-    if (isDev) {
-      const fetchDevData = async () => {
-        setLoading(true);
-        setProfile({ id: 'dev-id', username: 'Dev User', level: 5, xp: 450, gold: 500, currency: '₽' });
-        setCategories([
-          { id: 1, name: 'Продукты', type: 'expense', icon_name: null },
-          { id: 2, name: 'Кафе', type: 'expense', icon_name: null },
-          { id: 3, name: 'Зарплата', type: 'income', icon_name: null },
+    const initialize = async (sessionUser: any | null) => {
+      setUser(sessionUser);
+      if (sessionUser) {
+        await Promise.all([
+          getProfile(sessionUser.id),
+          getTransactions(sessionUser.id),
+          getCategories(sessionUser.id),
+          getStoreItems(),
+          getUserItems(sessionUser.id)
         ]);
-        setStoreItems([
-          { id: 1, name: 'Уютный шарфик', price: 80, icon_name: 'wind', slot: 'accessory' },
-          { id: 2, name: 'Модная кепка', price: 120, icon_name: 'a-large-small', slot: 'head' },
-        ]);
-        setUserItems([]);
-        setLoading(false);
       }
-      fetchDevData();
-      return;
-    }
-
-    const fetchInitialData = async (user: SupabaseUser) => {
-      await Promise.all([
-        getProfile(user.id),
-        getTransactions(user.id),
-        getCategories(user.id),
-        getStoreItems(),
-        getUserItems(user.id)
-      ]);
     };
-
-    const initialize = async () => {
+    
+    const bootstrap = async () => {
         setLoading(true);
         const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
-        setSupabaseUser(user ?? null);
-        if (user) {
-          await fetchInitialData(user);
-        }
+        await initialize(session?.user ?? null);
         setLoading(false);
     }
-    initialize();
+
+    bootstrap();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const user = session?.user;
-      setSupabaseUser(user ?? null);
-      if (user) {
-        setLoading(true);
-        await fetchInitialData(user);
-        setLoading(false);
-      } else {
-        setProfile(null);
-        setTransactions([]);
-        setUserItems([]);
-      }
+      setLoading(true);
+      await initialize(session?.user ?? null);
+      setLoading(false);
     });
 
     return () => {
@@ -107,57 +95,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [getProfile, getTransactions, getCategories, getStoreItems, getUserItems]);
 
   const addTransaction = useCallback(async (type: 'expense' | 'income', amount: number, categoryId: number) => {
-    if (isDev) {
-      const newTransaction = {
-        id: Math.random(), amount: type === 'expense' ? -Math.abs(amount) : Math.abs(amount),
-        category_id: categoryId, created_at: new Date().toISOString(), type, user_id: 'dev-id', notes: null
-      };
-      setTransactions(prev => [newTransaction, ...prev]);
-      if (profile) {
-        const newXp = profile.xp + 10;
-        const xpForNextLevel = profile.level * 100;
-        setProfile(p => {
-          if (!p) return null;
-          if (newXp >= xpForNextLevel) {
-            return { ...p, level: p.level + 1, xp: newXp - xpForNextLevel, gold: p.gold + (p.level * 10) };
-          }
-          return { ...p, xp: newXp };
-        });
-      }
-      return;
+    if (!user) return;
+    const numericAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
+    
+    const { data: newTransaction } = await supabase
+      .from('transactions')
+      .insert({ user_id: user.id, category_id: categoryId, amount: numericAmount, type })
+      .select('*, categories(name)')
+      .single();
+    
+    if (newTransaction) {
+      setTransactions(prev => [newTransaction as any, ...prev]);
+      await supabase.rpc('add_xp', { user_id_in: user.id, xp_to_add: 10 });
+      await getProfile(user.id);
     }
-
-    if (!supabaseUser) return;
-    // ... Реальная логика для продакшена ...
-  }, [profile, supabaseUser, getProfile]);
+  }, [user, getProfile]);
 
   const buyItem = useCallback(async (item: Item): Promise<boolean> => {
-    if (isDev) {
-        if (!profile || profile.gold < item.price) {
-            alert('Недостаточно золота!');
-            return false;
-        }
-        setProfile(p => p ? { ...p, gold: p.gold - item.price } : null);
-        const newUserItem: UserItem = { id: Math.random(), item_id: item.id, user_id: 'dev-id', is_equipped: false, items: item };
-        setUserItems(prev => [...prev, newUserItem]);
-        return true;
+    if (!user || !profile || profile.gold < item.price) {
+      alert('Недостаточно золота!');
+      return false;
     }
-    // ... Реальная логика для продакшена ...
+    
+    const { data: newProfile } = await supabase.from('profiles').update({ gold: profile.gold - item.price }).eq('id', user.id).select().single();
+    const { data: newUserItem } = await supabase.from('user_items').insert({ user_id: user.id, item_id: item.id }).select('*, items(*)').single();
+
+    if (newProfile && newUserItem) {
+      setProfile(newProfile);
+      setUserItems(prev => [...prev, newUserItem as UserItem]);
+      return true;
+    }
     return false;
-  }, [profile]);
+  }, [user, profile]);
 
   const equipItem = useCallback(async (itemToEquip: UserItem) => {
-    if (isDev) {
-        setUserItems(prevItems => prevItems.map(item => ({
-            ...item,
-            is_equipped: item.items.slot === itemToEquip.items.slot ? item.id === itemToEquip.id ? !item.is_equipped : false : item.is_equipped
-        })));
-        return;
+    if (!user || !userItems) return;
+  
+    const currentlyEquipped = userItems.find(
+      (item) => item.items.slot === itemToEquip.items.slot && item.is_equipped
+    );
+  
+    const requests = [];
+  
+    if (currentlyEquipped && currentlyEquipped.id !== itemToEquip.id) {
+      requests.push(
+        supabase.from('user_items').update({ is_equipped: false }).eq('id', currentlyEquipped.id)
+      );
     }
-    // ... Реальная логика для продакшена ...
-  }, []);
+    
+    const newEquippedState = !itemToEquip.is_equipped;
+    requests.push(
+      supabase.from('user_items').update({ is_equipped: newEquippedState }).eq('id', itemToEquip.id)
+    );
+  
+    await Promise.all(requests);
+  
+    await getUserItems(user.id);
+  }, [user, userItems, getUserItems]);
       
-  const value = { supabaseUser, profile, transactions, categories, addTransaction, loading, storeItems, userItems, buyItem, equipItem };
+  const value = { user, profile, transactions, categories, addTransaction, loading, storeItems, userItems, buyItem, equipItem };
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 

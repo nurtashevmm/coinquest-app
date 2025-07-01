@@ -3,12 +3,24 @@ import { useAppContext } from '../context/AppContext';
 export const HomePage = () => {
   const { profile, transactions, categories, loading } = useAppContext();
 
-  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
-  const total = transactions.reduce((sum, t) => sum + t.amount, 0);
-
-  if (loading || !profile) {
+  if (loading) {
     return <div className="container">Загрузка...</div>;
   }
+
+  // Показываем приветствие, даже если профиль еще не загрузился
+  if (!profile) {
+     return (
+        <div className="container page-home">
+            <div className="page-header">
+                <h1>CoinQuest</h1>
+                <p className="welcome-text">Привет, Герой!</p>
+            </div>
+        </div>
+     );
+  }
+
+  const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+  const total = transactions.reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className="container page-home">
